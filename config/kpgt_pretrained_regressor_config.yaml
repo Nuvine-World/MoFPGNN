@@ -1,0 +1,25 @@
+model_type: kpgt_pretrained_regressor
+dataset: AGILE
+split: random          # 'random' or 'Murcko_scaffold'
+device: cuda
+
+# Paths
+csv_path: data/AGILE.csv
+split_path: data/splits/AGILE/random.npy
+embeddings_path: data/fingerprints/AGILE/kpgt_embeddings.pkl
+
+epochs: 20
+lr: 0.001
+batch_size: 64
+weight_decay: 0.00001
+patience: 20
+warmup_epochs: 3
+grad_clip: 1.0
+loss_fn: mse
+loss_per_epoch: true
+
+# Pretrained embedding regressor
+embedding_dim: 2304             # KPGT default output dim (or 2068 for fallback)
+regressor:
+  hidden_dim: 512      
+  dropout: 0.3
