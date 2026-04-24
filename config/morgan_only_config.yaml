@@ -1,0 +1,26 @@
+model_type: morgan_only
+dataset: AGILE
+split: Murcko_scaffold                    # 'random' or 'Murcko_scaffold'
+device: cuda
+
+# Paths
+csv_path: data/AGILE.csv
+split_path: data/splits/AGILE/Murcko_scaffold.npy
+morgan_path: data/fingerprints/AGILE/morgan.pkl
+
+# Training hyperparameters
+epochs: 100
+lr: 0.001
+batch_size: 64
+weight_decay: 0.0001
+patience: 30
+warmup_epochs: 5
+grad_clip: 1.0
+loss_fn: huber
+loss_per_epoch: true
+
+# MLP head
+morgan_dim: 2048
+mlp_head:
+  hidden_layers: [512, 256]
+  dropout: 0.3

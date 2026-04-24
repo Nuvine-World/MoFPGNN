@@ -17,7 +17,7 @@ The core idea is that pretrained KPGT graph-level embeddings and fixed-radius su
 - **Pretrained KPGT embeddings** (2304-dim) extracted from the official pretrained KPGT model
 - **2048-bit count-based Morgan fingerprints** (radius 2) extracted with RDKit
 - **Late-fusion hybrid architecture**: `MLP([kpgt_emb || f_morgan]) -> mTP`
-- **Ablation baselines**: pure KPGT pretrained regressor, Morgan-only MLP, plus the original LANTERN models
+- **Ablation baselines**: pure KPGT pretrained regressor, Morgan-only MLP
 - **Extended evaluation**: R2, RMSE, MAE, Pearson r, top-k% ranking recovery
 - **Random and Murcko scaffold splits** with configurable train/val/test ratios
 
@@ -29,7 +29,6 @@ The core idea is that pretrained KPGT graph-level embeddings and fixed-radius su
   * [Quick Start](#quick-start)
   * [Detailed Usage](#detailed-usage)
   * [Configuration Reference](#configuration-reference)
-  * [Original LANTERN Pipeline](#original-lantern-pipeline)
   * [Citation](#citation)
 
 ## Architecture
@@ -67,7 +66,28 @@ pretrained weights and reused across all experiments.
 
 ---
 
-### Step 2B — MoFPGNN: Pretrained KPGT + Morgan Hybrid (Option B, core model)
+### Step 2B — Morgan-Only MLP (Option B)
+
+```
+    morgan_fp (2048)
+          |
+          v
+    +-------------+
+    |  MLP Head   |
+    | 512 -> 256  |
+    |    -> 1     |
+    +-------------+
+          |
+          v
+    Predicted mTP
+```
+
+Isolates the contribution of Morgan fingerprints alone, without any graph-level information.
+Used to quantify how much KPGT graph embeddings add on top of a fingerprint-only baseline.
+
+---
+
+### Step 2C — MoFPGNN: Pretrained KPGT + Morgan Hybrid (Option C, core model)
 
 ```
     kpgt_emb (2304)      morgan_fp (2048)
@@ -96,7 +116,8 @@ pretrained weights and reused across all experiments.
 .
 ├── config/
 │   ├── kpgt_pretrained_regressor_config.yaml      # KPGT pretrained embeddings + regressor
-│   └── kpgt_morgan_pretrained_hybrid_config.yaml  # KPGT pretrained + Morgan (MoFPGNN core)
+│   ├── kpgt_morgan_pretrained_hybrid_config.yaml  # KPGT pretrained + Morgan (MoFPGNN core)
+│   └── morgan_only_config.yaml                    # Morgan fingerprint-only
 │
 ├── models/
 │   ├── kpgt_encoder.py         PretrainedEmbeddingRegressor
@@ -195,7 +216,19 @@ conda activate mofpgnn
 python scripts/run_kpgt_pipeline.py --config config/kpgt_pretrained_regressor_config.yaml
 ```
 
-### Option B - KPGT + Morgan pretrained hybrid (MoFPGNN core model)
+### Option B - Morgan fingerprint-only
+
+Trains an MLP on 2048-bit Morgan fingerprints only. No graph information. Used to isolate how much KPGT contributes over fingerprints alone.
+
+```bash
+# 1. Extract Morgan fingerprints (if not already done)
+python scripts/extract_morgan_fingerprint.py
+
+# 2. Train the Morgan-only baseline
+python scripts/run_kpgt_pipeline.py --config config/morgan_only_config.yaml
+```
+
+### Option C - KPGT + Morgan pretrained hybrid (MoFPGNN core model)
 
 Fuses pretrained KPGT embeddings (2304-dim) with Morgan fingerprints (2048-dim) via late fusion for a total of 4352-dim input to the MLP head.
 
@@ -234,6 +267,9 @@ Output: `data/fingerprints/AGILE/morgan.pkl`
 Each experiment is controlled by a YAML config file:
 
 ```bash
+# Morgan fingerprint-only
+python scripts/run_kpgt_pipeline.py --config config/morgan_only_config.yaml
+
 # KPGT pretrained embeddings + regressor
 python scripts/run_kpgt_pipeline.py --config config/kpgt_pretrained_regressor_config.yaml
 
@@ -241,10 +277,17 @@ python scripts/run_kpgt_pipeline.py --config config/kpgt_pretrained_regressor_co
 python scripts/run_kpgt_pipeline.py --config config/kpgt_morgan_pretrained_hybrid_config.yaml
 ```
 
-Override split type from the command line:
+Override split type from the command line (applies to all three pipelines):
 
 ```bash
-# Use Murcko scaffold split instead of random
+python scripts/run_kpgt_pipeline.py \
+    --config config/morgan_only_config.yaml \
+    --split Murcko_scaffold
+
+python scripts/run_kpgt_pipeline.py \
+    --config config/kpgt_pretrained_regressor_config.yaml \
+    --split Murcko_scaffold
+
 python scripts/run_kpgt_pipeline.py \
     --config config/kpgt_morgan_pretrained_hybrid_config.yaml \
     --split Murcko_scaffold
@@ -271,8 +314,39 @@ Model checkpoints are saved to `checkpoints/<pipeline_name>.pth`.
 
 | `model_type` | Description | Required data |
 |---|---|---|
+| `morgan_only` | Morgan fingerprint-only MLP | `morgan.pkl` |
 | `kpgt_pretrained_regressor` | Pretrained KPGT embeddings + MLP regressor | `kpgt_embeddings.pkl` |
 | `kpgt_morgan_pretrained_hybrid` | Pretrained KPGT + Morgan late fusion (MoFPGNN) | `kpgt_embeddings.pkl`, `morgan.pkl` |
+
+### Morgan-Only Config
+
+```yaml
+model_type: morgan_only
+dataset: AGILE
+split: random                    # random | Murcko_scaffold
+device: cuda                     # cuda | cpu
+
+# Paths
+csv_path: data/AGILE.csv
+split_path: data/splits/AGILE/random.npy
+morgan_path: data/fingerprints/AGILE/morgan.pkl
+
+# Training
+epochs: 100
+lr: 0.001
+batch_size: 64
+weight_decay: 0.0001
+patience: 30
+warmup_epochs: 5
+grad_clip: 1.0
+loss_fn: huber
+
+# MLP Head (input = 2048)
+morgan_dim: 2048
+mlp_head:
+  hidden_layers: [512, 256]
+  dropout: 0.3
+```
 
 ### KPGT Pretrained Regressor Config
 
@@ -332,4 +406,4 @@ loss_fn: huber
 mlp_head:
   hidden_layers: [512, 256]
   dropout: 0.3
-
+```

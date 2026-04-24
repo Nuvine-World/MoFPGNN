@@ -197,6 +197,74 @@ class _HybridEmbeddingDataset(torch.utils.data.Dataset):
         return self._data_list[idx]
 
 
+class _MorganOnlyDataset(torch.utils.data.Dataset):
+    """Dataset wrapping Morgan fingerprints + labels (no KPGT embeddings)."""
+
+    def __init__(self, morgan_fps, labels):
+        from torch_geometric.data import Data
+        self._data_list = []
+        for morgan_fp, y in zip(morgan_fps, labels):
+            d = Data()
+            d.morgan_fp = torch.tensor(morgan_fp, dtype=torch.float32).unsqueeze(0)
+            d.y = torch.tensor([y], dtype=torch.float32)
+            self._data_list.append(d)
+
+    def __len__(self):
+        return len(self._data_list)
+
+    def __getitem__(self, idx):
+        return self._data_list[idx]
+
+    def len(self):
+        return len(self._data_list)
+
+    def get(self, idx):
+        return self._data_list[idx]
+
+
+def _load_morgan_only_datasets(config):
+    """Build train/val/test datasets from Morgan fingerprints only."""
+    from sklearn.preprocessing import StandardScaler
+
+    csv_path = config.get("csv_path", "data/AGILE.csv")
+    split_path = config["split_path"]
+    morgan_path = config["morgan_path"]
+
+    df = pd.read_csv(csv_path)
+    smiles_list = df["SMILES"].tolist()
+    targets = df["Target"].values.astype(np.float32)
+
+    morgan_dict = load_pickle(morgan_path)
+    morgan_fps = []
+    for smi in smiles_list:
+        fp = morgan_dict.get(smi)
+        if fp is None:
+            fp = np.zeros_like(next(iter(morgan_dict.values())))
+        morgan_fps.append(fp)
+    morgan_fps = np.array(morgan_fps, dtype=np.float32)
+    morgan_fps = np.nan_to_num(morgan_fps, nan=0.0, posinf=0.0, neginf=0.0)
+    config["morgan_dim"] = morgan_fps.shape[1]
+
+    splits = np.load(split_path, allow_pickle=True)
+    train_idx, val_idx, test_idx = splits[0], splits[1], splits[2]
+
+    scaler = StandardScaler()
+    scaler.fit(morgan_fps[train_idx])
+    morgan_fps = np.clip(
+        scaler.transform(morgan_fps).astype(np.float32), -10.0, 10.0
+    )
+
+    train_ds = _MorganOnlyDataset(morgan_fps[train_idx], targets[train_idx])
+    val_ds = _MorganOnlyDataset(morgan_fps[val_idx], targets[val_idx])
+    test_ds = _MorganOnlyDataset(morgan_fps[test_idx], targets[test_idx])
+
+    print(f"  Train: {len(train_ds)} | Val: {len(val_ds)} | Test: {len(test_ds)}")
+    print(f"  Morgan dim: {config['morgan_dim']}")
+    print(f"  Features scaled: mean~0, std~1 (fit on train, clipped to [-10, 10])")
+
+    return train_ds, val_ds, test_ds
+
+
 def _load_pretrained_hybrid_datasets(config):
     """Build train/val/test datasets with both KPGT embeddings AND Morgan FPs.
 
@@ -293,6 +361,9 @@ def run_kpgt_pipeline(config_path):
     elif model_type == "kpgt_pretrained_regressor":
         print("Loading pre-extracted embeddings...")
         train_ds, val_ds, test_ds = _load_pretrained_embedding_datasets(config)
+    elif model_type == "morgan_only":
+        print("Loading Morgan fingerprints (ablation)...")
+        train_ds, val_ds, test_ds = _load_morgan_only_datasets(config)
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
