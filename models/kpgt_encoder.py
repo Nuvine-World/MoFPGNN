@@ -5,10 +5,6 @@ class PretrainedEmbeddingRegressor(nn.Module):
     """
     Regressor trained on pre-extracted KPGT embeddings.
 
-    This matches the LANTERN paper's methodology exactly:
-      "For KPGT, we used their pretrained model embeddings and trained
-       a three-layer regressor with a hidden dimension of 512 for 20 epochs."
-
     Args:
         input_dim: dimension of pre-extracted embeddings (KPGT default: 2304)
         hidden_dim: hidden layer size (default 512, per paper)

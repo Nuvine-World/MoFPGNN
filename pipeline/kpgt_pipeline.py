@@ -347,8 +347,13 @@ def run_kpgt_pipeline(config_path):
 
     model_type = config.get("model_type", "kpgt_pretrained_regressor")
     split_name = config.get("split", "random")
+    fp_variant = config.get("fp_variant", "")
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    pipeline_name = f"{model_type}-{split_name}-{timestamp}"
+    name_parts = [model_type]
+    if fp_variant:
+        name_parts.append(fp_variant)
+    name_parts += [split_name, timestamp]
+    pipeline_name = "-".join(name_parts)
     config["pipeline_save_name"] = pipeline_name
 
     print(f"Pipeline: {pipeline_name}")
@@ -413,6 +418,7 @@ def run_kpgt_pipeline(config_path):
     save_metrics_to_file(
         {"Train": train_metrics, "Val": val_metrics, "Test": test_metrics},
         os.path.join(results_dir, "metrics.txt"),
+        title=pipeline_name,
     )
 
     for name, preds, labels in [

@@ -119,16 +119,20 @@ def format_metrics(metrics, name=""):
     return "\n".join(lines)
 
 
-def save_metrics_to_file(metrics_dict, path):
+def save_metrics_to_file(metrics_dict, path, title=None):
     """
     Save metrics for multiple splits to a text file.
 
     Args:
         metrics_dict: dict of {split_name: metrics_dict}
         path: output file path
+        title: optional header string; defaults to the file's parent directory name
     """
+    import os
+    if title is None:
+        title = os.path.basename(os.path.dirname(path))
     with open(path, "w") as f:
-        f.write("KPGT + Morgan Fingerprint Pipeline -- Evaluation Metrics\n")
+        f.write(f"{title} -- Evaluation Metrics\n")
         f.write("=" * 60 + "\n")
         for name, metrics in metrics_dict.items():
             f.write(format_metrics(metrics, name))

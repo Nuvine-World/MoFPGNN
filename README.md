@@ -5,20 +5,20 @@
 </p>
 
 <p align="justify">
-<strong>MoFPGNN</strong> extends the <a href="https://github.com/AsalMehradfar/LANTERN">LANTERN</a> framework with a hybrid pipeline that fuses <strong>KPGT</strong> (Knowledge-Guided Pre-Training) pretrained molecular embeddings with <strong>2048-bit count-based Morgan fingerprints</strong> via late fusion for predicting the mRNA transfection potency (mTP) of ionizable lipids used in lipid nanoparticle (LNP) delivery systems.
+<strong>MoFPGNN</strong> extends the <a href="https://github.com/AsalMehradfar/LANTERN">LANTERN</a> framework with a hybrid pipeline that fuses <strong>KPGT</strong> (Knowledge-Guided Pre-Training) pretrained molecular embeddings with <strong>2048-bit Morgan fingerprints</strong> via late fusion for predicting the mRNA transfection potency (mTP) of ionizable lipids used in lipid nanoparticle (LNP) delivery systems.
 </p>
 
 <p align="justify">
-The core idea is that pretrained KPGT graph-level embeddings and fixed-radius substructure counts (captured by Morgan fingerprints) encode complementary chemical information. By concatenating these representations and training an MLP regression head, the hybrid model is expected to outperform either representation alone.
+The core idea is that pretrained KPGT graph-level embeddings and fixed-radius substructure counts (captured by Morgan fingerprints) encode complementary chemical information. By concatenating these representations and training an MLP regression head, the hybrid model is expected to outperform either representation alone. Two fingerprint variants are experimented: <strong>circular Morgan fingerprints (CMF)</strong>, which encode substructure counts, and <strong>binary Morgan fingerprints (BMF)</strong>, which encode substructure presence only.
 </p>
 
 ### Key Features
 
 - **Pretrained KPGT embeddings** (2304-dim) extracted from the official pretrained KPGT model
-- **2048-bit count-based Morgan fingerprints** (radius 2) extracted with RDKit
+- **Two Morgan fingerprint variants**: circular count-based (CMF) and binary bit-vector (BMF / ECFP4), both radius 2, 2048-bit
 - **Late-fusion hybrid architecture**: `MLP([kpgt_emb || f_morgan]) -> mTP`
-- **Ablation baselines**: pure KPGT pretrained regressor, Morgan-only MLP
-- **Extended evaluation**: R2, RMSE, MAE, Pearson r, top-k% ranking recovery
+- **Ablation baselines**: pure KPGT pretrained regressor, CMF-only MLP, BMF-only MLP
+- **Evaluation**: R2, RMSE, MAE, Pearson r, top-k% ranking recovery
 - **Random and Murcko scaffold splits** with configurable train/val/test ratios
 
 ## Table of Contents
@@ -66,28 +66,32 @@ pretrained weights and reused across all experiments.
 
 ---
 
-### Step 2B — Morgan-Only MLP (Option B)
+### Step 2B — Morgan-Only MLP (Options B1 / B2, ablation baselines)
 
 ```
-    morgan_fp (2048)
-          |
-          v
-    +-------------+
-    |  MLP Head   |
-    | 512 -> 256  |
-    |    -> 1     |
-    +-------------+
-          |
-          v
-    Predicted mTP
+    morgan_fp (2048)              morgan_fp (2048)
+    [CMF — count-based]           [BMF — binary / ECFP4]
+          |                               |
+          v                               v
+    +-------------+               +-------------+
+    |  MLP Head   |               |  MLP Head   |
+    | 512 -> 256  |               | 512 -> 256  |
+    |    -> 1     |               |    -> 1     |
+    +-------------+               +-------------+
+          |                               |
+          v                               v
+    Predicted mTP                  Predicted mTP
 ```
 
-Isolates the contribution of Morgan fingerprints alone, without any graph-level information.
-Used to quantify how much KPGT graph embeddings add on top of a fingerprint-only baseline.
+Two ablation baselines using Morgan fingerprints only (no graph information):
+- **B1 — CMF-only**: count-based fingerprints; captures substructure frequency
+- **B2 — BMF-only**: binary bit-vector (ECFP4); encodes presence only; assesses whether counts add value over binary
+
+Together these isolate how much KPGT graph embeddings contribute on top of fingerprints alone.
 
 ---
 
-### Step 2C — MoFPGNN: Pretrained KPGT + Morgan Hybrid (Option C, core model)
+### Step 2C — MoFPGNN: Pretrained KPGT + Morgan Hybrid (Options C1 / C2, core models)
 
 ```
     kpgt_emb (2304)      morgan_fp (2048)
@@ -110,14 +114,20 @@ Used to quantify how much KPGT graph embeddings add on top of a fingerprint-only
             Predicted mTP
 ```
 
+Two hybrid variants, one per fingerprint type:
+- **C1 — KPGT + CMF**: count-based fusion (4352-dim input)
+- **C2 — KPGT + BMF**: binary fusion (4352-dim input); assesses value of binary vs count-based representations
+
 ## Project Structure
 
 ```
 .
 ├── config/
-│   ├── kpgt_pretrained_regressor_config.yaml      # KPGT pretrained embeddings + regressor
-│   ├── kpgt_morgan_pretrained_hybrid_config.yaml  # KPGT pretrained + Morgan (MoFPGNN core)
-│   └── morgan_only_config.yaml                    # Morgan fingerprint-only
+│   ├── kpgt_pretrained_regressor_config.yaml      # Option A: KPGT-only regressor
+│   ├── morgan_only_config.yaml                    # Option B1: CMF-only ablation
+│   ├── morgan_binary_only_config.yaml             # Option B2: BMF-only ablation
+│   ├── kpgt_morgan_pretrained_hybrid_config.yaml  # Option C1: KPGT + CMF hybrid (MoFPGNN core)
+│   └── kpgt_morgan_binary_hybrid_config.yaml      # Option C2: KPGT + BMF hybrid
 │
 ├── models/
 │   ├── kpgt_encoder.py         PretrainedEmbeddingRegressor
@@ -201,7 +211,7 @@ python scripts/extract_kpgt_embeddings.py \
 
 ### Option A - KPGT with pretrained embeddings
 
-Uses the official pretrained KPGT model to extract fixed 2304-dim embeddings, then trains a lightweight regressor. This matches the LANTERN paper methodology.
+Uses the official pretrained KPGT model to extract fixed 2304-dim embeddings, then trains a lightweight regressor. 
 
 ```bash
 # 1. Extract KPGT embeddings (one-time, requires KPGT env — see Pre-requisite)
@@ -216,30 +226,56 @@ conda activate mofpgnn
 python scripts/run_kpgt_pipeline.py --config config/kpgt_pretrained_regressor_config.yaml
 ```
 
-### Option B - Morgan fingerprint-only
+### Option B1 - CMF-only (count-based Morgan fingerprints)
 
-Trains an MLP on 2048-bit Morgan fingerprints only. No graph information. Used to isolate how much KPGT contributes over fingerprints alone.
+MLP trained on 2048-bit count-based Morgan fingerprints. No graph information.
 
 ```bash
-# 1. Extract Morgan fingerprints (if not already done)
-python scripts/extract_morgan_fingerprint.py
+# 1. Extract circular (count-based) Morgan fingerprints
+python scripts/extract_morgan_fingerprint.py --fp_type circular
 
-# 2. Train the Morgan-only baseline
+# 2. Train
 python scripts/run_kpgt_pipeline.py --config config/morgan_only_config.yaml
 ```
 
-### Option C - KPGT + Morgan pretrained hybrid (MoFPGNN core model)
+### Option B2 - BMF-only (binary Morgan fingerprints / ECFP4)
 
-Fuses pretrained KPGT embeddings (2304-dim) with Morgan fingerprints (2048-dim) via late fusion for a total of 4352-dim input to the MLP head.
+MLP trained on 2048-bit binary Morgan fingerprints. Assesses whether binary presence encoding differs from count-based (CMF).
+
+```bash
+# 1. Extract binary Morgan fingerprints
+python scripts/extract_morgan_fingerprint.py --fp_type binary
+
+# 2. Train
+python scripts/run_kpgt_pipeline.py --config config/morgan_binary_only_config.yaml
+```
+
+### Option C1 - KPGT + CMF hybrid (MoFPGNN core model)
+
+Fuses pretrained KPGT embeddings (2304-dim) with count-based Morgan fingerprints (2048-dim).
 
 ```bash
 # 1. Extract KPGT embeddings (if not already done — see Option A step 1)
 
-# 2. Extract Morgan fingerprints (one-time)
-python scripts/extract_morgan_fingerprint.py
+# 2. Extract circular Morgan fingerprints (if not already done)
+python scripts/extract_morgan_fingerprint.py --fp_type circular
 
-# 3. Train the pretrained hybrid model
+# 3. Train
 python scripts/run_kpgt_pipeline.py --config config/kpgt_morgan_pretrained_hybrid_config.yaml
+```
+
+### Option C2 - KPGT + BMF hybrid
+
+Fuses pretrained KPGT embeddings with binary Morgan fingerprints. Explores whether binary presence encoding changes performance relative to CMF.
+
+```bash
+# 1. Extract KPGT embeddings (if not already done — see Option A step 1)
+
+# 2. Extract binary Morgan fingerprints (if not already done)
+python scripts/extract_morgan_fingerprint.py --fp_type binary
+
+# 3. Train
+python scripts/run_kpgt_pipeline.py --config config/kpgt_morgan_binary_hybrid_config.yaml
 ```
 
 ## Detailed Usage
@@ -250,46 +286,57 @@ See [Pre-requisite](#pre-requisite) for full setup. This produces `data/fingerpr
 
 ### 2. Extract Morgan Fingerprints
 
-Generates 2048-bit count-based Morgan fingerprints (radius 2) for all molecules:
+Two fingerprint types are supported via `--fp_type`:
+
+| Type | Flag | Description | Output file | 
+|------|------|-------------|-------------|
+| Circular (CMF) | `--fp_type circular` | Count-based; encodes substructure frequency | `morgan_circular.pkl` | 
+| Binary (BMF) | `--fp_type binary` | Bit-vector (ECFP4); encodes substructure presence only | `morgan_binary.pkl` | 
 
 ```bash
+# Circular (count-based) — CMF
 python scripts/extract_morgan_fingerprint.py \
+    --fp_type circular \
+    --data_name AGILE \
+    --save_path data/fingerprints/AGILE \
+    --radius 2 \
+    --n_bits 2048
+
+# Binary (ECFP4-style) — BMF
+python scripts/extract_morgan_fingerprint.py \
+    --fp_type binary \
     --data_name AGILE \
     --save_path data/fingerprints/AGILE \
     --radius 2 \
     --n_bits 2048
 ```
 
-Output: `data/fingerprints/AGILE/morgan.pkl`
-
 ### 3. Run Individual Experiments
 
 Each experiment is controlled by a YAML config file:
 
 ```bash
-# Morgan fingerprint-only
-python scripts/run_kpgt_pipeline.py --config config/morgan_only_config.yaml
-
-# KPGT pretrained embeddings + regressor
+# Option A — KPGT-only regressor
 python scripts/run_kpgt_pipeline.py --config config/kpgt_pretrained_regressor_config.yaml
 
-# KPGT pretrained + Morgan hybrid (MoFPGNN core model)
+# Option B1 — CMF-only ablation
+python scripts/run_kpgt_pipeline.py --config config/morgan_only_config.yaml
+
+# Option B2 — BMF-only ablation
+python scripts/run_kpgt_pipeline.py --config config/morgan_binary_only_config.yaml
+
+# Option C1 — KPGT + CMF hybrid (MoFPGNN core)
 python scripts/run_kpgt_pipeline.py --config config/kpgt_morgan_pretrained_hybrid_config.yaml
+
+# Option C2 — KPGT + BMF hybrid
+python scripts/run_kpgt_pipeline.py --config config/kpgt_morgan_binary_hybrid_config.yaml
 ```
 
-Override split type from the command line (applies to all three pipelines):
+Override the split from the command line (applies to all configs):
 
 ```bash
 python scripts/run_kpgt_pipeline.py \
-    --config config/morgan_only_config.yaml \
-    --split Murcko_scaffold
-
-python scripts/run_kpgt_pipeline.py \
-    --config config/kpgt_pretrained_regressor_config.yaml \
-    --split Murcko_scaffold
-
-python scripts/run_kpgt_pipeline.py \
-    --config config/kpgt_morgan_pretrained_hybrid_config.yaml \
+    --config config/<any_config>.yaml \
     --split Murcko_scaffold
 ```
 
@@ -312,13 +359,15 @@ Model checkpoints are saved to `checkpoints/<pipeline_name>.pth`.
 
 ### Model Types
 
-| `model_type` | Description | Required data |
-|---|---|---|
-| `morgan_only` | Morgan fingerprint-only MLP | `morgan.pkl` |
-| `kpgt_pretrained_regressor` | Pretrained KPGT embeddings + MLP regressor | `kpgt_embeddings.pkl` |
-| `kpgt_morgan_pretrained_hybrid` | Pretrained KPGT + Morgan late fusion (MoFPGNN) | `kpgt_embeddings.pkl`, `morgan.pkl` |
+| Option | `model_type` | Fingerprint | Description |  Required data |
+|--------|---|---|---|---|
+| A | `kpgt_pretrained_regressor` | — | KPGT embeddings + MLP | `kpgt_embeddings.pkl` |
+| B1 | `morgan_only` | CMF (circular) | Count-based FP-only MLP | `morgan_circular.pkl` |
+| B2 | `morgan_only` | BMF (binary) | ECFP4-style FP-only MLP | `morgan_binary.pkl` |
+| C1 | `kpgt_morgan_pretrained_hybrid` | CMF (circular) | KPGT + CMF late fusion (MoFPGNN core) | `kpgt_embeddings.pkl`, `morgan_circular.pkl` |
+| C2 | `kpgt_morgan_pretrained_hybrid` | BMF (binary) | KPGT + BMF late fusion |`kpgt_embeddings.pkl`, `morgan_binary.pkl` |
 
-### Morgan-Only Config
+### CMF-Only Config (Option B1)
 
 ```yaml
 model_type: morgan_only
@@ -329,7 +378,37 @@ device: cuda                     # cuda | cpu
 # Paths
 csv_path: data/AGILE.csv
 split_path: data/splits/AGILE/random.npy
-morgan_path: data/fingerprints/AGILE/morgan.pkl
+morgan_path: data/fingerprints/AGILE/morgan_circular.pkl
+
+# Training
+epochs: 100
+lr: 0.001
+batch_size: 64
+weight_decay: 0.0001
+patience: 30
+warmup_epochs: 5
+grad_clip: 1.0
+loss_fn: huber
+
+# MLP Head (input = 2048)
+morgan_dim: 2048
+mlp_head:
+  hidden_layers: [512, 256]
+  dropout: 0.3
+```
+
+### BMF-Only Config (Option B2)
+
+```yaml
+model_type: morgan_only
+dataset: AGILE
+split: random                    # random | Murcko_scaffold
+device: cuda                     # cuda | cpu
+
+# Paths
+csv_path: data/AGILE.csv
+split_path: data/splits/AGILE/random.npy
+morgan_path: data/fingerprints/AGILE/morgan_binary.pkl
 
 # Training
 epochs: 100
@@ -361,7 +440,7 @@ csv_path: data/AGILE.csv
 split_path: data/splits/AGILE/random.npy
 embeddings_path: data/fingerprints/AGILE/kpgt_embeddings.pkl
 
-# Training (per LANTERN paper: 20 epochs, hidden_dim 512)
+# Training (20 epochs, hidden_dim 512)
 epochs: 20
 lr: 0.001
 batch_size: 64
@@ -378,7 +457,7 @@ regressor:
   dropout: 0.3
 ```
 
-### KPGT + Morgan Pretrained Hybrid Config (MoFPGNN core)
+### KPGT + CMF Hybrid Config (Option C1 — MoFPGNN core)
 
 ```yaml
 model_type: kpgt_morgan_pretrained_hybrid
@@ -390,7 +469,37 @@ device: cuda                     # cuda | cpu
 csv_path: data/AGILE.csv
 split_path: data/splits/AGILE/random.npy
 embeddings_path: data/fingerprints/AGILE/kpgt_embeddings.pkl
-morgan_path: data/fingerprints/AGILE/morgan.pkl
+morgan_path: data/fingerprints/AGILE/morgan_circular.pkl
+
+# Training
+epochs: 100
+lr: 0.001
+batch_size: 64
+weight_decay: 0.0001
+patience: 30
+warmup_epochs: 5
+grad_clip: 1.0
+loss_fn: huber
+
+# MLP Head (input = 2304 + 2048 = 4352)
+mlp_head:
+  hidden_layers: [512, 256]
+  dropout: 0.3
+```
+
+### KPGT + BMF Hybrid Config (Option C2)
+
+```yaml
+model_type: kpgt_morgan_pretrained_hybrid
+dataset: AGILE
+split: random                    # random | Murcko_scaffold
+device: cuda                     # cuda | cpu
+
+# Paths
+csv_path: data/AGILE.csv
+split_path: data/splits/AGILE/random.npy
+embeddings_path: data/fingerprints/AGILE/kpgt_embeddings.pkl
+morgan_path: data/fingerprints/AGILE/morgan_binary.pkl
 
 # Training
 epochs: 100

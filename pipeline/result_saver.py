@@ -20,7 +20,7 @@ def save_predictions_with_labels(preds_list, labels_list, idxs_list, name_list, 
 
 def compute_and_save_metrics(preds_list, labels_list, name_list, save_path, num_cls=6, num_floats=4):
     with open(save_path, 'w') as f:
-        f.write("📊 Metrics Computation\n")
+        f.write("Metrics Computation\n")
         for preds, labels, name in zip(preds_list, labels_list, name_list):
             f.write('\n')
             f.write(f'{name}:\n')
