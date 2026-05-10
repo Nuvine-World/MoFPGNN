@@ -1,0 +1,36 @@
+site_name: LANTERN ChemFF Documentation
+site_description: Chemprop + Morgan Fingerprint Feedforward Model for LNP Transfection Prediction
+repo_url: https://github.com/YOUR_USERNAME/LANTERN
+
+theme:
+  name: material
+  palette:
+    primary: teal
+    accent: amber
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - tables
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Setup: setup.md
+  - Notebooks:
+    - "01 — Morgan Fingerprints": notebooks/01_morgan.md
+    - "02 — Chemprop D-MPNN": notebooks/02_chemprop.md
+    - "03 — ChemFF Combined": notebooks/03_chemff.md
+  - API Reference: api.md

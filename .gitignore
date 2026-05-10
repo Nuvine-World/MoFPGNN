@@ -1,0 +1,16 @@
+.DS_Store
+**/__pycache__/
+.ipynb_checkpoints
+wandb/*
+results/
+AGILE_noTarget/
+AGILE_noTarget.csv
+*.tex
+*.pdf
+*.pkl
+
+
+Slides/
+reports/
+kpgt
+docs/
