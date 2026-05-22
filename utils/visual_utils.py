@@ -6,7 +6,7 @@ from scipy.stats import gaussian_kde
 import pandas as pd
 from sklearn.manifold import TSNE
 
-from pipeline.result_saver import compute_metrics
+from utils.metrics import compute_all_metrics
 from utils.confusion_matrix_utils import create_and_plot_confusion_matrix
 
 
@@ -70,10 +70,12 @@ def generate_split_regression_plots(preds, labels, split, save_folder=None,
     """
     Generate prediction vs true plot and confusion heatmap for a single split (e.g., train, valid, test).
     """
+    preds = np.asarray(preds).flatten()
+    labels = np.asarray(labels).flatten()
 
-    metrics = compute_metrics(preds, labels)
+    metrics = compute_all_metrics(preds, labels)
     rmse = metrics.get("RMSE", 0)
-    acc_0 = metrics.get("Acc 0", 0)
+    top20 = metrics.get("Top-20%_recovery", 0)
 
     # Prediction vs Measurement Plot
     plot_prediction_vs_true(
@@ -94,7 +96,7 @@ def generate_split_regression_plots(preds, labels, split, save_folder=None,
         save_path=os.path.join(save_folder, f"confusion_{split}"),
         show=show,
         save_format=save_format,
-        title=f'Accuracy: {acc_0}%',
+        title=f'Top-20% Recovery: {top20 * 100:.1f}%',
         fig_size=(13, 12),
         vmax=0.75,
         font_scale=font_scale
