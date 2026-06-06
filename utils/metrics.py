@@ -85,7 +85,7 @@ def compute_screening_metrics(preds, labels, thresholds=(1, 5, 10),
     for k in metric_keys:
         ci_lo = float(np.percentile(replicates[k], 2.5))
         ci_hi = float(np.percentile(replicates[k], 97.5))
-        results[k] = round(observed[k], num_floats)
+        results[k] = round(float(np.mean(replicates[k])), num_floats)
         results[k + "_95CI"] = "[{}, {}]".format(
             round(ci_lo, num_floats), round(ci_hi, num_floats)
         )
