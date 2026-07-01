@@ -19,6 +19,12 @@ def get_confusion_matrix(pred, target, labels, normalize=True):
     return pd.DataFrame(cm, index=labels, columns=labels)
 
 
+def ranking_accuracy(label_cls, pred_cls, num_classes):
+    cm = confusion_matrix(label_cls, pred_cls,
+                          labels=list(range(num_classes)), normalize='true')
+    return float(np.nanmean(np.diag(cm)))
+
+
 def plot_confusion_matrix(pred, target, labels, normalize=True,
                           save_path=None, fig_size=(10, 10), save_format='svg',
                           title='Confusion Matrix', x_label='Predicted Top k Percentiles', 
@@ -53,9 +59,9 @@ def plot_confusion_matrix(pred, target, labels, normalize=True,
     plt.close()
 
 
-def create_and_plot_confusion_matrix(labels, preds, num_classes=6, fig_size=(13, 12), 
-                                     axis_labels=None, save_path=None, show=False, 
-                                     save_format='jpg', vmax=1, title='Confusion Matrix', 
+def create_and_plot_confusion_matrix(labels, preds, num_classes=6, fig_size=(13, 12),
+                                     axis_labels=None, save_path=None, show=False,
+                                     save_format='jpg', vmax=1, title=None,
                                      font_scale=3):
     sn.set_theme(style='whitegrid', context='paper', font_scale=font_scale)
 
@@ -63,6 +69,10 @@ def create_and_plot_confusion_matrix(labels, preds, num_classes=6, fig_size=(13,
         axis_labels = [f'{i}' for i in range(num_classes)]
 
     label_cls, pred_cls = convert_to_class(labels, preds, num_classes)
+
+    acc = ranking_accuracy(label_cls, pred_cls, num_classes)
+    if title is None:
+        title = f'Accuracy: {acc * 100:.1f}%'
 
     plot_confusion_matrix(
         pred_cls, label_cls, axis_labels,
@@ -75,3 +85,4 @@ def create_and_plot_confusion_matrix(labels, preds, num_classes=6, fig_size=(13,
         vmax=vmax,
         num_classes=num_classes
     )
+    return acc

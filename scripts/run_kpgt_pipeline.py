@@ -8,18 +8,19 @@ from pipeline.kpgt_pipeline import run_kpgt_pipeline
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run the pretrained KPGT + Morgan Fingerprint pipeline"
+        description="Run the Morgan-fingerprint MLP baselines (CMF-only / BMF-only)"
     )
     parser.add_argument(
         "--config",
-        default="config/kpgt_pretrained_regressor_config.yaml",
-        help="Path to YAML configuration file",
+        default="config/morgan_only_config.yaml",
+        help="Path to YAML config (morgan_only_config.yaml = CMF-only, "
+             "morgan_binary_only_config.yaml = BMF-only)",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
-        help="Random seed for reproducibility",
+        default=None,
+        help="Override the seed in the config file (default: use config's `seed`, or 42)",
     )
     parser.add_argument(
         "--split",
@@ -29,15 +30,22 @@ def main():
     )
     args = parser.parse_args()
 
-    seed_everything(args.seed)
+    from utils.io_tools import load_yaml
+    config = load_yaml(args.config)
+
+    # Seed precedence: CLI --seed > config `seed:` > 42.
+    seed = args.seed if args.seed is not None else config.get("seed", 42)
+    seed_everything(seed)
+    print(f"Using seed: {seed}")
 
     config_path = args.config
+    overridden = False
     if args.split:
-        from utils.io_tools import load_yaml
-        config = load_yaml(config_path)
         config["split"] = args.split
         config["split_path"] = f"data/splits/{config.get('dataset', 'AGILE')}/{args.split}.npy"
+        overridden = True
 
+    if overridden:
         import yaml, tempfile
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         yaml.dump(config, tmp)

@@ -13,12 +13,19 @@ from utils.io_tools import save_pickle
 RDLogger.DisableLog('rdApp.*')
 
 
-def compute_circular_morgan_fingerprints(smiles_list, radius=2, n_bits=2048):
-    """
-    Compute count-based (circular) Morgan fingerprints.
-    Each feature value is the substructure count at that hash bucket.
-    Equivalent to ECFP with integer counts rather than binary presence.
-    """
+def compute_count_fingerprints(smiles_list, n_bits=2048):
+    from deepchem.feat import CircularFingerprint
+
+    featurizer = CircularFingerprint(1024, size=n_bits,
+                                     is_counts_based=True, chiral=True)
+    fps = featurizer.featurize(smiles_list)
+    results = {}
+    for smiles, fp in zip(smiles_list, fps):
+        results[smiles] = np.asarray(fp, dtype=np.float32)
+    return results
+
+
+def compute_count_fingerprints_rdkit(smiles_list, radius=2, n_bits=2048):
     results = {}
     failed = []
 
@@ -40,12 +47,7 @@ def compute_circular_morgan_fingerprints(smiles_list, radius=2, n_bits=2048):
     return results
 
 
-def compute_binary_morgan_fingerprints(smiles_list, radius=2, n_bits=2048):
-    """
-    Compute binary Morgan fingerprints (ECFP-style bit vectors).
-    Each feature is 1 if the substructure is present, 0 otherwise.
-    Equivalent to ECFP4 (radius=2, 2048 bits), matching the LANTERN baseline.
-    """
+def compute_binary_fingerprints(smiles_list, radius=2, n_bits=2048):
     results = {}
     failed = []
 
@@ -68,7 +70,7 @@ def compute_binary_morgan_fingerprints(smiles_list, radius=2, n_bits=2048):
 
 def get_args():
     parser = ArgumentParser(
-        description="Extract Morgan fingerprints (circular count-based or binary bit-vector)"
+        description="Extract Morgan fingerprints (count-based CMF or binary BMF)"
     )
     parser.add_argument("--data_name", type=str, default="AGILE")
     parser.add_argument("--save_path", type=str, default="data/fingerprints/AGILE")
@@ -77,11 +79,14 @@ def get_args():
     parser.add_argument(
         "--fp_type",
         type=str,
-        default="circular",
-        choices=["circular", "binary"],
+        default="count",
+        choices=["count", "count_rdkit", "binary"],
         help=(
-            "circular: count-based Morgan FP (CMF); "
-            "binary: bit-vector Morgan FP (BMF / ECFP4-style, matches LANTERN)"
+            "count: count-based circular FP via DeepChem, radius=1024 + chiral "
+            "(CMF, recommended) -> morgan_count.pkl; "
+            "count_rdkit: vanilla RDKit count Morgan at --radius (ablation only) "
+            "-> morgan_count_rdkit.pkl; "
+            "binary: bit-vector Morgan FP (BMF / ECFP4-style) -> morgan_binary.pkl"
         ),
     )
     return parser.parse_args()
@@ -95,16 +100,20 @@ if __name__ == "__main__":
 
     print(
         f"Computing {args.n_bits}-bit {args.fp_type} Morgan fingerprints "
-        f"(radius={args.radius}) for {len(smiles_list)} molecules..."
+        f"for {len(smiles_list)} molecules..."
     )
 
     if args.fp_type == "binary":
-        fingerprints = compute_binary_morgan_fingerprints(
+        fingerprints = compute_binary_fingerprints(
             smiles_list, radius=args.radius, n_bits=args.n_bits
         )
-    else:
-        fingerprints = compute_circular_morgan_fingerprints(
+    elif args.fp_type == "count_rdkit":
+        fingerprints = compute_count_fingerprints_rdkit(
             smiles_list, radius=args.radius, n_bits=args.n_bits
+        )
+    else:  # "count" -> DeepChem CMF (recommended)
+        fingerprints = compute_count_fingerprints(
+            smiles_list, n_bits=args.n_bits
         )
 
     print(f"Successfully computed fingerprints for {len(fingerprints)} molecules.")

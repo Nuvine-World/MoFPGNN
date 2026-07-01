@@ -60,7 +60,7 @@ def generate_all_regression_plots(train_preds, val_preds, test_preds,
                                     save_format=save_format,
                                     font_scale=font_scale)
 
-    print(f"✅ Regression plots and confusion heatmaps saved to: {save_folder}")
+    print(f"Regression plots and confusion heatmaps saved to: {save_folder}")
 
 
 def generate_split_regression_plots(preds, labels, split, save_folder=None,
@@ -75,7 +75,6 @@ def generate_split_regression_plots(preds, labels, split, save_folder=None,
 
     metrics = compute_all_metrics(preds, labels)
     rmse = metrics.get("RMSE", 0)
-    top20 = metrics.get("Top-20%_recovery", 0)
 
     # Prediction vs Measurement Plot
     plot_prediction_vs_true(
@@ -90,13 +89,14 @@ def generate_split_regression_plots(preds, labels, split, save_folder=None,
         font_scale=font_scale
     )
 
-    # Confusion-style Heatmap
+    # Confusion-style Heatmap (title auto-set to "Accuracy: XX.X%" =
+    # mean of the row-normalised diagonal, matching the AGILE ranking figure)
     create_and_plot_confusion_matrix(
         labels, preds,
         save_path=os.path.join(save_folder, f"confusion_{split}"),
         show=show,
         save_format=save_format,
-        title=f'Top-20% Recovery: {top20 * 100:.1f}%',
+        title=None,
         fig_size=(13, 12),
         vmax=0.75,
         font_scale=font_scale
@@ -168,7 +168,7 @@ def plot_prediction_vs_true(preds, labels, save_path=None, fig_size=(10, 10),
 
     if save_path:
         plt.savefig(f'{save_path}.{save_format}', format=save_format, dpi=400, bbox_inches='tight')
-        print(f"✅ Saved regression plot to: {save_path}.{save_format}")
+        print(f"Saved regression plot to: {save_path}.{save_format}")
 
     if show:
         plt.show()
@@ -211,7 +211,7 @@ def plot_tsne(features, labels, n_components=2, random_state=42, cmap='plasma',
 
     if save_path:
         plt.savefig(f"{save_path}.{save_format}", format=save_format, dpi=400, bbox_inches='tight')
-        print(f"✅ Saved t-SNE plot to: {save_path}.{save_format}")
+        print(f"Saved t-SNE plot to: {save_path}.{save_format}")
     if show:
         plt.show()
     plt.close()

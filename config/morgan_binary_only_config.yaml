@@ -1,27 +1,33 @@
 model_type: morgan_only
-fp_variant: binary               # appended to results folder name
+fp_variant: binary               # appended to results folder name -> morgan_only-binary-...
 dataset: AGILE
-split: random                    # 'random' or 'Murcko_scaffold'
+split: Murcko_scaffold           # 'random' or 'Murcko_scaffold' (override with --split)
 device: cuda
 
 # Paths
 csv_path: data/AGILE.csv
-split_path: data/splits/AGILE/random.npy
+split_path: data/splits/AGILE/Murcko_scaffold.npy
 morgan_path: data/fingerprints/AGILE/morgan_binary.pkl
 
-# Training hyperparameters
+
+feature_scaling: minmax_joint
+
+# Training hyperparameters (same as morgan_only_config.yaml)
+seed: 42
 epochs: 100
-lr: 0.001
-batch_size: 64
-weight_decay: 0.0001
-patience: 30
-warmup_epochs: 5
-grad_clip: 1.0
-loss_fn: huber
+lr: 0.0002
+batch_size: 100
+weight_decay: 0.0
+scheduler: none
+shuffle: false
+patience: 100
+warmup_epochs: 0
+grad_clip: 0
+loss_fn: mse
 loss_per_epoch: true
 
-# MLP head
+# MLP head: 7-layer feedforward (6 hidden + output), ReLU, no dropout
 morgan_dim: 2048
 mlp_head:
-  hidden_layers: [512, 256]
-  dropout: 0.3
+  hidden_layers: [200, 300, 500, 500, 300, 200]
+  dropout: 0.0

@@ -34,10 +34,17 @@ def _build_model(config, device):
     if model_type == "kpgt_pretrained_regressor":
         reg_config = config.get("regressor", {})
         embedding_dim = config.get("embedding_dim", 2304)
+        if "mlp_head" in config:
+            reg_hidden = mlp_hidden
+            reg_dropout = dropout_mlp
+        else:
+            hd = reg_config.get("hidden_dim", 512)
+            reg_hidden = [hd, hd]
+            reg_dropout = reg_config.get("dropout", 0.3)
         model = PretrainedEmbeddingRegressor(
             input_dim=embedding_dim,
-            hidden_dim=reg_config.get("hidden_dim", 512),
-            dropout=reg_config.get("dropout", 0.3),
+            mlp_hidden=reg_hidden,
+            dropout=reg_dropout,
         )
 
     elif model_type == "kpgt_morgan_pretrained_hybrid":
@@ -223,9 +230,7 @@ class _MorganOnlyDataset(torch.utils.data.Dataset):
 
 
 def _load_morgan_only_datasets(config):
-    """Build train/val/test datasets from Morgan fingerprints only."""
-    from sklearn.preprocessing import StandardScaler
-
+    """Build train/val/test datasets with only Morgan fingerprints"""
     csv_path = config.get("csv_path", "data/AGILE.csv")
     split_path = config["split_path"]
     morgan_path = config["morgan_path"]
@@ -247,6 +252,38 @@ def _load_morgan_only_datasets(config):
 
     splits = np.load(split_path, allow_pickle=True)
     train_idx, val_idx, test_idx = splits[0], splits[1], splits[2]
+
+    feature_scaling = config.get("feature_scaling", "standard")
+
+    if feature_scaling == "minmax_joint":
+        from sklearn.preprocessing import MinMaxScaler
+
+        combined = np.hstack(
+            [morgan_fps.astype(np.float64), targets.reshape(-1, 1).astype(np.float64)]
+        )
+        scaler = MinMaxScaler(feature_range=(-1, 1)).fit(combined)
+        scaled = scaler.transform(combined)
+        morgan_fps = scaled[:, :-1].astype(np.float32)
+        scaled_labels = scaled[:, -1].astype(np.float32)
+
+        ymin = float(scaler.data_min_[-1])
+        ymax = float(scaler.data_max_[-1])
+        # Inverse of MinMax(-1,1): y = (s + 1)/2 * (ymax - ymin) + ymin
+        #                            = s * (ymax - ymin)/2 + (ymax + ymin)/2
+        config["_label_scale"] = (ymax - ymin) / 2.0
+        config["_label_shift"] = (ymax + ymin) / 2.0
+
+        train_ds = _MorganOnlyDataset(morgan_fps[train_idx], scaled_labels[train_idx])
+        val_ds = _MorganOnlyDataset(morgan_fps[val_idx], scaled_labels[val_idx])
+        test_ds = _MorganOnlyDataset(morgan_fps[test_idx], scaled_labels[test_idx])
+
+        print(f"  Train: {len(train_ds)} | Val: {len(val_ds)} | Test: {len(test_ds)}")
+        print(f"  Morgan dim: {config['morgan_dim']}")
+        print(f"  Features+labels scaled jointly: MinMax[-1,1], fit on ALL data")
+        return train_ds, val_ds, test_ds
+
+    # Default: z-score features (fit on train), clip to [-10, 10]
+    from sklearn.preprocessing import StandardScaler
 
     scaler = StandardScaler()
     scaler.fit(morgan_fps[train_idx])
@@ -372,8 +409,17 @@ def run_kpgt_pipeline(config_path):
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
-    # Normalise labels
-    label_mean, label_std = _normalise_labels(train_ds, val_ds, test_ds)
+    # Normalise labels.
+    # In "minmax_joint" mode the labels were already scaled jointly with the
+    # features in _load_morgan_only_datasets, so we reuse that scaler's inverse
+    # (affine) instead of z-scoring again.
+    if config.get("feature_scaling") == "minmax_joint":
+        label_std = config["_label_scale"]
+        label_mean = config["_label_shift"]
+        print(f"Label scaling (MinMax inverse): "
+              f"scale={label_std:.4f}, shift={label_mean:.4f}")
+    else:
+        label_mean, label_std = _normalise_labels(train_ds, val_ds, test_ds)
 
     # Model
     print("Building model...")
@@ -448,12 +494,12 @@ def _save_plots(loss_dict, train_preds, val_preds, test_preds,
             config,
         )
     except Exception as e:
-        print(f"Warning: could not generate plots via LANTERN utils: {e}")
+        print(f"Warning: could not generate plots via visual utils: {e}")
         _fallback_plots(loss_dict, test_preds, test_labels, results_dir)
 
 
 def _fallback_plots(loss_dict, test_preds, test_labels, results_dir):
-    """Simple fallback plots if LANTERN visual utils fail."""
+    """Simple fallback plots if the visual utils fail."""
     try:
         import matplotlib
         matplotlib.use("Agg")

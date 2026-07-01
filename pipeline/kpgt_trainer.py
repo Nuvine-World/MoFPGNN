@@ -71,9 +71,15 @@ class KPGTTrainer:
         warmup_epochs = self.config.get("warmup_epochs", 10)
         grad_clip = self.config.get("grad_clip", 1.0)
         loss_fn = self.config.get("loss_fn", "huber")
+        # "cosine" (default) keeps the WarmupCosine schedule used by the
+        # KPGT/hybrid models. "none"/"constant" holds lr fixed -- the Morgan-only
+        # MLP baseline trains with a constant lr.
+        scheduler_type = self.config.get("scheduler", "cosine")
+        # The Morgan-only baseline's DataLoader does NOT shuffle; default stays True.
+        shuffle = self.config.get("shuffle", True)
 
         train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                                  shuffle=True, drop_last=False)
+                                  shuffle=shuffle, drop_last=False)
         val_loader = DataLoader(val_dataset, batch_size=batch_size,
                                 shuffle=False)
 
@@ -83,8 +89,12 @@ class KPGTTrainer:
         else:
             params = list(self.model.parameters())
 
+        # AdamW with weight_decay=0 is identical to plain Adam (the baseline's choice).
         optimizer = optim.AdamW(params, lr=lr, weight_decay=weight_decay)
-        scheduler = WarmupCosineScheduler(optimizer, warmup_epochs, epochs)
+        if scheduler_type in ("none", "constant", None):
+            scheduler = None
+        else:
+            scheduler = WarmupCosineScheduler(optimizer, warmup_epochs, epochs)
 
         # Huber loss is more robust to outlier targets than MSE
         if loss_fn == "huber":
@@ -107,7 +117,9 @@ class KPGTTrainer:
                 preds = self._forward(batch)
                 loss = criterion(preds.squeeze(-1), batch.y.squeeze(-1))
                 loss.backward()
-                nn.utils.clip_grad_norm_(params, max_norm=grad_clip)
+                # grad_clip <= 0 (or None) disables clipping -- the baseline does not clip.
+                if grad_clip and grad_clip > 0:
+                    nn.utils.clip_grad_norm_(params, max_norm=grad_clip)
                 optimizer.step()
                 epoch_train_loss += loss.item() * batch.num_graphs
                 n_train += batch.num_graphs
@@ -117,7 +129,8 @@ class KPGTTrainer:
             # Validate
             avg_val = self._evaluate_loss(val_loader, criterion)
 
-            scheduler.step()
+            if scheduler is not None:
+                scheduler.step()
             train_losses.append(avg_train)
             val_losses.append(avg_val)
 

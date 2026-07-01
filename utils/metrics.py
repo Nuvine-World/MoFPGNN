@@ -52,7 +52,7 @@ def _compute_screening_single(preds, labels, thresholds):
     return results
 
 
-def compute_screening_metrics(preds, labels, thresholds=(1, 5, 10),
+def compute_screening_metrics(preds, labels, thresholds=(5, 10),
                                n_bootstrap=1000, seed=42, num_floats=4):
     """
     Compute EF, NDCG, and HitRate at each top-% threshold, with 95%
@@ -105,7 +105,9 @@ def compute_regression_metrics(preds, labels, num_floats=4):
     r2   = r2_score(labels, preds)
     rmse = np.sqrt(np.mean((preds - labels) ** 2))
     mae  = np.mean(np.abs(preds - labels))
-    corr = float(pearsonr(preds, labels).statistic)
+    # pearsonr returns a PearsonRResult (scipy >=1.9, has .statistic) or a plain
+    # (r, p) tuple (older scipy). Indexing [0] works on both versions.
+    corr = float(pearsonr(preds, labels)[0])
 
     return {
         "R2":        round(r2,   num_floats),
@@ -113,31 +115,6 @@ def compute_regression_metrics(preds, labels, num_floats=4):
         "MAE":       round(mae,  num_floats),
         "Pearson_r": round(corr, num_floats),
     }
-
-
-def compute_topk_accuracy(preds, labels, k_percentiles=None):
-    """
-    Percentile-based ranking accuracy: fraction of compounds in the true
-    top-k% that are recovered in the predicted top-k%.
-
-    Following the protocol of Xu et al. (AGILE, Nature Communications 2024).
-    """
-    if k_percentiles is None:
-        k_percentiles = [5, 10, 20]
-
-    preds  = np.asarray(preds).flatten()
-    labels = np.asarray(labels).flatten()
-    n = len(preds)
-
-    results = {}
-    for k in k_percentiles:
-        top_n     = max(1, int(np.ceil(n * k / 100.0)))
-        true_topk = set(np.argsort(labels)[-top_n:])
-        pred_topk = set(np.argsort(preds)[-top_n:])
-        recovery  = len(true_topk & pred_topk) / len(true_topk)
-        results[f"Top-{k}%_recovery"] = round(recovery, 4)
-
-    return results
 
 
 def compute_relative_error_stats(preds, labels, percentiles=None):
@@ -162,12 +139,11 @@ def compute_relative_error_stats(preds, labels, percentiles=None):
 
 def compute_all_metrics(preds, labels, name="", num_floats=4):
     """
-    Compute all metrics: regression + top-k recovery +
-    screening (EF/NDCG/HitRate with 95% bootstrap CI) + relative error.
+    Compute all metrics: regression +
+    screening (EF/NDCG/HitRate @5%/10% with 95% bootstrap CI) + relative error.
     """
     metrics = {}
     metrics.update(compute_regression_metrics(preds, labels, num_floats))
-    metrics.update(compute_topk_accuracy(preds, labels))
     metrics.update(compute_screening_metrics(preds, labels, num_floats=num_floats))
     metrics.update(compute_relative_error_stats(preds, labels))
     return metrics
