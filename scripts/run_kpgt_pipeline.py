@@ -26,7 +26,7 @@ def main():
         "--split",
         type=str,
         default=None,
-        help="Override split type (random / Murcko_scaffold)",
+        help="Override split type (random)",
     )
     args = parser.parse_args()
 
@@ -39,10 +39,20 @@ def main():
     print(f"Using seed: {seed}")
 
     config_path = args.config
-    overridden = False
+    # The trainer reads the seed from the config, so always write it through.
+    config["seed"] = seed
+    overridden = True
     if args.split:
         config["split"] = args.split
-        config["split_path"] = f"data/splits/{config.get('dataset', 'AGILE')}/{args.split}.npy"
+        split_path = f"data/splits/{config.get('dataset', 'AGILE')}/{args.split}.npy"
+        if not os.path.exists(split_path):
+            import glob
+            avail = sorted(os.path.basename(p)[:-4] for p in
+                           glob.glob(f"data/splits/{config.get('dataset', 'AGILE')}/*.npy"))
+            raise SystemExit(
+                f"ERROR: unknown split '{args.split}' (no file at {split_path}).\n"
+                f"       Available splits: {', '.join(avail) or 'none'}")
+        config["split_path"] = split_path
         overridden = True
 
     if overridden:

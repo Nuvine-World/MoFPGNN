@@ -2,20 +2,11 @@ import torch.nn as nn
 
 
 class PretrainedEmbeddingRegressor(nn.Module):
-    """
-    Regressor trained on pre-extracted KPGT embeddings.
+    """Regressor on pre-extracted KPGT embeddings.
 
-    Builds a ReLU feedforward head from an explicit list of hidden-layer sizes,
-    matching MorganOnlyMLP / PretrainedKPGTMorganHybrid so that Options A/B/C can
-    share the same MLP head for a head-matched ablation.
-
-    Args:
-        input_dim: dimension of pre-extracted embeddings (KPGT default: 2304)
-        mlp_hidden: list of hidden-layer sizes, e.g. [200, 300, 500, 500, 300, 200].
-            If None, falls back to a 2-layer [hidden_dim, hidden_dim] head
-            (backward-compatible with the old `regressor: {hidden_dim}` configs).
-        dropout: dropout probability (0.0 = no dropout)
-        hidden_dim: legacy 2-layer width, used only when mlp_hidden is None.
+    Builds a ReLU feedforward head from `mlp_hidden`; when that is None it falls
+    back to a two-layer [hidden_dim, hidden_dim] head, which the older
+    `regressor: {hidden_dim}` configs rely on.
     """
 
     def __init__(self, input_dim=2304, mlp_hidden=None, dropout=0.3,

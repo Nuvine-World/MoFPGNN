@@ -212,3 +212,8 @@ __marimo__/
 /results
 data/fingerprints/AGILE
 *.pkl
+
+# local helpers and build products
+.DS_Store
+/*.pdf
+/run_*.sh

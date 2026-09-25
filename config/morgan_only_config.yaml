@@ -1,11 +1,11 @@
 model_type: morgan_only
 dataset: AGILE
-split: Murcko_scaffold           # 'random' or 'Murcko_scaffold'
+split: random           # 'random'
 device: cuda
 
 # Paths
 csv_path: data/AGILE.csv
-split_path: data/splits/AGILE/Murcko_scaffold.npy
+split_path: data/splits/AGILE/random.npy
 morgan_path: data/fingerprints/AGILE/morgan_count.pkl
 
 # Preprocessing

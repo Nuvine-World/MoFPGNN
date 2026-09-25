@@ -3,22 +3,10 @@ import torch.nn as nn
 
 
 class PretrainedKPGTMorganHybrid(nn.Module):
-    """
-    Late-fusion hybrid using PRE-EXTRACTED KPGT embeddings + Morgan FPs.
+    """Concatenation hybrid on pre-extracted KPGT embeddings and Morgan fingerprints.
 
-    This is the core MoFPGNN model:
-        ŷ = MLP([ kpgt_emb || morgan_fp ])
-
-    where kpgt_emb is a 2304-dim vector from the official pretrained KPGT
-    and morgan_fp is a 2048-dim count-based Morgan fingerprint.
-
-    Total input: 2304 + 2048 = 4352 dimensions.
-
-    Args:
-        kpgt_dim: dimension of KPGT embeddings (default 2304)
-        morgan_dim: dimension of Morgan fingerprint (default 2048)
-        mlp_hidden: list of hidden layer sizes for the MLP head
-        dropout: dropout probability
+    y = MLP([kpgt_emb || morgan_fp]), with a 2304-dim KPGT embedding and a
+    2048-dim Morgan fingerprint, so the fused input is 4352-dim.
     """
 
     def __init__(self, kpgt_dim=2304, morgan_dim=2048,

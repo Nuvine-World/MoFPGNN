@@ -13,37 +13,15 @@ from utils.io_tools import save_pickle
 RDLogger.DisableLog('rdApp.*')
 
 
-def compute_count_fingerprints(smiles_list, n_bits=2048):
+def compute_count_fingerprints(smiles_list, n_bits=2048, radius=2):
     from deepchem.feat import CircularFingerprint
 
-    featurizer = CircularFingerprint(1024, size=n_bits,
+    featurizer = CircularFingerprint(radius=radius, size=n_bits,
                                      is_counts_based=True, chiral=True)
     fps = featurizer.featurize(smiles_list)
     results = {}
     for smiles, fp in zip(smiles_list, fps):
         results[smiles] = np.asarray(fp, dtype=np.float32)
-    return results
-
-
-def compute_count_fingerprints_rdkit(smiles_list, radius=2, n_bits=2048):
-    results = {}
-    failed = []
-
-    for smiles in smiles_list:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            failed.append(smiles)
-            continue
-
-        fp = AllChem.GetHashedMorganFingerprint(mol, radius, nBits=n_bits)
-        arr = np.zeros(n_bits, dtype=np.float32)
-        for idx, count in fp.GetNonzeroElements().items():
-            arr[idx % n_bits] = count
-        results[smiles] = arr
-
-    if failed:
-        print(f"Warning: failed to parse {len(failed)} SMILES: {failed[:5]}...")
-
     return results
 
 
@@ -74,7 +52,9 @@ def get_args():
     )
     parser.add_argument("--data_name", type=str, default="AGILE")
     parser.add_argument("--save_path", type=str, default="data/fingerprints/AGILE")
-    parser.add_argument("--radius", type=int, default=2)
+    parser.add_argument("--radius", type=int, default=2,
+                        help="Circular-fingerprint radius (default 2, the setting "
+                             "behind the reported results)")
     parser.add_argument("--n_bits", type=int, default=2048)
     parser.add_argument(
         "--fp_type",
@@ -82,11 +62,10 @@ def get_args():
         default="count",
         choices=["count", "count_rdkit", "binary"],
         help=(
-            "count: count-based circular FP via DeepChem, radius=1024 + chiral "
-            "(CMF, recommended) -> morgan_count.pkl; "
-            "count_rdkit: vanilla RDKit count Morgan at --radius (ablation only) "
-            "-> morgan_count_rdkit.pkl; "
-            "binary: bit-vector Morgan FP (BMF / ECFP4-style) -> morgan_binary.pkl"
+            "count: count-based circular fingerprint via DeepChem, chiral "
+            "(CMF) -> morgan_count.pkl; "
+            "count_rdkit: RDKit count Morgan at --radius -> morgan_count_rdkit.pkl; "
+            "binary: bit-vector Morgan fingerprint (BMF) -> morgan_binary.pkl"
         ),
     )
     return parser.parse_args()
@@ -113,7 +92,7 @@ if __name__ == "__main__":
         )
     else:  # "count" -> DeepChem CMF (recommended)
         fingerprints = compute_count_fingerprints(
-            smiles_list, n_bits=args.n_bits
+            smiles_list, n_bits=args.n_bits, radius=args.radius
         )
 
     print(f"Successfully computed fingerprints for {len(fingerprints)} molecules.")

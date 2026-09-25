@@ -7,6 +7,8 @@ import torch.optim as optim
 from copy import deepcopy
 from torch_geometric.loader import DataLoader
 
+from utils.utils import make_generator
+
 
 class WarmupCosineScheduler(optim.lr_scheduler._LRScheduler):
     """Linear warmup for `warmup_epochs`, then cosine decay to `min_lr`."""
@@ -20,11 +22,9 @@ class WarmupCosineScheduler(optim.lr_scheduler._LRScheduler):
 
     def get_lr(self):
         if self.last_epoch < self.warmup_epochs:
-            # Linear warmup
             alpha = self.last_epoch / max(1, self.warmup_epochs)
             return [base_lr * alpha for base_lr in self.base_lrs]
         else:
-            # Cosine annealing
             progress = (self.last_epoch - self.warmup_epochs) / max(
                 1, self.total_epochs - self.warmup_epochs)
             cosine = 0.5 * (1 + math.cos(math.pi * progress))
@@ -71,15 +71,14 @@ class KPGTTrainer:
         warmup_epochs = self.config.get("warmup_epochs", 10)
         grad_clip = self.config.get("grad_clip", 1.0)
         loss_fn = self.config.get("loss_fn", "huber")
-        # "cosine" (default) keeps the WarmupCosine schedule used by the
-        # KPGT/hybrid models. "none"/"constant" holds lr fixed -- the Morgan-only
-        # MLP baseline trains with a constant lr.
+        # "none"/"constant" holds lr fixed; the Morgan baseline trains that way.
         scheduler_type = self.config.get("scheduler", "cosine")
         # The Morgan-only baseline's DataLoader does NOT shuffle; default stays True.
         shuffle = self.config.get("shuffle", True)
-
+        generator = make_generator(self.config.get("seed", 42)) if shuffle else None
         train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                                  shuffle=shuffle, drop_last=False)
+                                  shuffle=shuffle, drop_last=False,
+                                  generator=generator)
         val_loader = DataLoader(val_dataset, batch_size=batch_size,
                                 shuffle=False)
 
@@ -117,7 +116,7 @@ class KPGTTrainer:
                 preds = self._forward(batch)
                 loss = criterion(preds.squeeze(-1), batch.y.squeeze(-1))
                 loss.backward()
-                # grad_clip <= 0 (or None) disables clipping -- the baseline does not clip.
+                # grad_clip <= 0 (or None) disables clipping; the baseline does not clip.
                 if grad_clip and grad_clip > 0:
                     nn.utils.clip_grad_norm_(params, max_norm=grad_clip)
                 optimizer.step()
